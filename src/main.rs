@@ -15,7 +15,9 @@ struct Player {
 struct Cell {
     index: i32,
     richness: i32,
-    tree: Option<Tree>
+    tree: Option<Tree>,
+    neighbours: [Option<i32>;6],
+    shadow_size: i32
 }
 
 #[derive(Debug)]
@@ -65,6 +67,38 @@ impl Player {
     }
 }
 
+impl Game {
+    fn set_shadows(&mut self) {
+        for c in &self.cells {
+            match &c.tree {
+                Some(t) => {
+                    let tree_size = t.size;
+                    self.set_shadow(c.index as usize, tree_size);
+                    ()
+                },
+                None => ()
+            }
+        }
+    }
+
+    fn set_shadow(&mut self, index: usize, count: i32) {
+        let sun_direction = self.day % 6;
+
+        match self.cells[index].neighbours[sun_direction as usize] {
+            None => (),
+            Some(i) => {
+                match count {
+                    0 => (),
+                    _ => {
+                        self.cells[index].shadow_size = 1;
+                        self.set_shadow(i as usize, count - 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Write an action using println!("message...");
 // To debug: eprintln!("Debug message...");
 fn main() {
@@ -89,7 +123,34 @@ fn main() {
         cells.push(Cell {
             index: index,
             richness: richness,
-            tree: None
+            tree: None,
+            neighbours: [
+                match neigh_0 {
+                    -1 => None,
+                    _ => Some(neigh_0)
+                }, 
+                match neigh_1 {
+                    -1 => None,
+                    _ => Some(neigh_1)
+                }, 
+                match neigh_2 {
+                    -1 => None,
+                    _ => Some(neigh_2)
+                }, 
+                match neigh_3 {
+                    -1 => None,
+                    _ => Some(neigh_3)
+                }, 
+                match neigh_4 {
+                    -1 => None,
+                    _ => Some(neigh_4)
+                }, 
+                match neigh_5 {
+                    -1 => None,
+                    _ => Some(neigh_5)
+                }
+            ],
+            shadow_size: 0
         });
     }
 
@@ -187,9 +248,15 @@ fn main() {
             let mut input_line = String::new();
             io::stdin().read_line(&mut input_line).unwrap();
             let possible_move = input_line.trim_matches('\n').to_string();
+            // eprintln!("{:?}", possible_move);
         }
 
-        eprintln!("{:?}", game);
+        // eprintln!("{:?}", game);
+
+        // for c in &game.cells {
+        //     eprintln!("{:?}", c);
+        // }
+
         let mut complete_index = 0;
         let mut score = 0;
 
