@@ -10,12 +10,19 @@ macro_rules! parse_input {
 struct Player {
     id: i32,
     sun: i32,
+    rollback_sun: i32,
     score: i32,
+    rollback_score: i32,
     waiting: i32,
+    rollback_waiting: i32,
     number_of_trees_0 : i32,
+    rollback_number_of_trees_0: i32,
     number_of_trees_1 : i32,
+    rollback_number_of_trees_1: i32,
     number_of_trees_2 : i32,
-    number_of_trees_3 : i32
+    rollback_number_of_trees_2: i32,
+    number_of_trees_3 : i32,
+    rollback_number_of_trees_3: i32,
 }
 
 #[derive(Debug)]
@@ -24,15 +31,20 @@ struct Cell {
     x: i32,
     y: i32,
     richness: i32,
+    rollback_richness: i32,
     tree: Option<Tree>,
+    rollback_tree: Option<Tree>,
     neighbours: [Option<i32>;6],
-    shadow_size: i32
+    shadow_size: i32,
+    rollback_shadow_size: i32
 }
 
 #[derive(Debug)]
 struct Game {
     day: i32,
+    rollback_day: i32,
     nutrients: i32,
+    rollback_nutrients: i32,
     number_of_trees: i32,
     cells: Vec<Cell>
 }
@@ -125,6 +137,22 @@ impl Player {
                             self.sun -= cost;
                             t.size += 1;
                             t.is_dormant = 1;
+
+                            match t.size {
+                                1 => {
+                                    self.number_of_trees_0 -= 1;
+                                    self.number_of_trees_1 += 1;
+                                },
+                                2 => {
+                                    self.number_of_trees_1 -= 1;
+                                    self.number_of_trees_2 += 1;
+                                },
+                                3 => {
+                                    self.number_of_trees_2 -= 1;
+                                    self.number_of_trees_3 += 1;
+                                },
+                                _ => panic!("")
+                            }
                         }
                     },
                     0 => (),
@@ -192,6 +220,16 @@ impl Player {
             }
         }
     }
+
+    fn rollback(&mut self) {
+        self.sun = self.rollback_sun;
+        self.score = self.rollback_score;
+        self.waiting = self.rollback_waiting;
+        self.number_of_trees_0 = self.rollback_number_of_trees_0;
+        self.number_of_trees_1 = self.rollback_number_of_trees_1;
+        self.number_of_trees_2 = self.rollback_number_of_trees_2;
+        self.number_of_trees_3 = self.rollback_number_of_trees_3;
+    }
 }
 
 impl Cell {
@@ -201,9 +239,12 @@ impl Cell {
             x,
             y,
             richness: 0,
+            rollback_richness: 0,
             tree: None,
+            rollback_tree: None,
             neighbours: [None, None, None, None, None, None],
-            shadow_size: 0
+            shadow_size: 0,
+            rollback_shadow_size: 0
         }
     }
 
@@ -216,6 +257,25 @@ impl Cell {
         } else {
             cmp::max(dx.abs(), dy.abs())
         }
+    }
+
+    fn rollback(&mut self) {
+        self.richness = self.rollback_richness;
+
+        match &self.rollback_tree {
+            None => {
+                self.tree = None;
+            },
+            Some(t) => {
+                self.tree = Some(Tree {
+                    size: t.size,
+                    is_mine: t.is_mine,
+                    is_dormant: t.is_dormant
+                });
+            }
+        }
+
+        self.shadow_size = self.rollback_shadow_size;
     }
 }
 
@@ -250,6 +310,15 @@ impl Game {
 
         for s in shadows {
             self.cells[s.0].shadow_size = s.1;
+        }
+    }
+
+    fn rollback(&mut self) {
+        self.day = self.rollback_day;
+        self.nutrients = self.rollback_nutrients;
+
+        for c in &mut self.cells {
+            c.rollback();
         }
     }
 }
@@ -351,7 +420,9 @@ fn main() {
 
     let mut game = Game {
         day: 0,
+        rollback_day: 0,
         nutrients: 20,
+        rollback_nutrients: 20,
         number_of_trees: 0,
         cells
     };
@@ -359,23 +430,37 @@ fn main() {
     let mut player = Player {
         id: 0,
         sun: 0,
+        rollback_sun: 0,
         score: 0,
+        rollback_score: 0,
         waiting: 0,
+        rollback_waiting: 0,
         number_of_trees_0: 0,
+        rollback_number_of_trees_0: 0,
         number_of_trees_1: 0,
+        rollback_number_of_trees_1: 0,
         number_of_trees_2: 0,
-        number_of_trees_3: 0
+        rollback_number_of_trees_2: 0,
+        number_of_trees_3: 0,
+        rollback_number_of_trees_3: 0,
     };
 
     let mut opponent = Player {
         id: 1,
         sun: 0,
+        rollback_sun: 0,
         score: 0,
+        rollback_score: 0,
         waiting: 0,
+        rollback_waiting: 0,
         number_of_trees_0: 0,
+        rollback_number_of_trees_0: 0,
         number_of_trees_1: 0,
+        rollback_number_of_trees_1: 0,
         number_of_trees_2: 0,
-        number_of_trees_3: 0
+        rollback_number_of_trees_2: 0,
+        number_of_trees_3: 0,
+        rollback_number_of_trees_3: 0,
     };
 
     // game loop
@@ -398,9 +483,11 @@ fn main() {
 
         let sun = parse_input!(inputs[0], i32); // your sun points
         player.sun = sun;
+        player.rollback_sun = sun;
 
         let score = parse_input!(inputs[1], i32); // your current score
         player.score = score;
+        player.rollback_score = score;
 
         let mut input_line = String::new();
         io::stdin().read_line(&mut input_line).unwrap();
@@ -408,12 +495,15 @@ fn main() {
 
         let opp_sun = parse_input!(inputs[0], i32); // opponent's sun points
         opponent.sun = opp_sun;
+        opponent.rollback_sun = opp_sun;
 
         let opp_score = parse_input!(inputs[1], i32); // opponent's score
         opponent.score = opp_score;
+        opponent.rollback_score = opp_score;
 
         let opp_is_waiting = parse_input!(inputs[2], i32); // whether your opponent is asleep until the next day
         opponent.waiting = opp_is_waiting;
+        opponent.rollback_waiting = opp_is_waiting;
 
         let mut input_line = String::new();
         io::stdin().read_line(&mut input_line).unwrap();
@@ -508,9 +598,12 @@ mod tests {
                 x: 0,
                 y: 0,
                 richness: 3,
+                rollback_richness: 3,
                 tree: None,
+                rollback_tree: None,
                 neighbours: [None, None, None, None, None, None],
-                shadow_size: 0
+                shadow_size: 0,
+                rollback_shadow_size: 0
             });
         }
 
@@ -526,7 +619,9 @@ mod tests {
 
         let mut game = Game {
             day: 0,
+            rollback_day: 0,
             nutrients: 20,
+            rollback_nutrients: 20,
             number_of_trees: 1,
             cells
         };
@@ -547,9 +642,12 @@ mod tests {
                 x: 0,
                 y: 0,
                 richness: 3,
+                rollback_richness: 3,
                 tree: None,
+                rollback_tree: None,
                 neighbours: [None, None, None, None, None, None],
-                shadow_size: 0
+                shadow_size: 0,
+                rollback_shadow_size: 0
             });
         }
 
@@ -562,17 +660,26 @@ mod tests {
         let mut player = Player {
             id: 0,
             sun: 2,
+            rollback_sun: 0,
             score: 0,
+            rollback_score: 0,
             waiting: 0,
+            rollback_waiting: 0,
             number_of_trees_0: 1,
+            rollback_number_of_trees_0: 1,
             number_of_trees_1: 0,
+            rollback_number_of_trees_1: 0,
             number_of_trees_2: 0,
-            number_of_trees_3: 0
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 0,
+            rollback_number_of_trees_3: 0,
         };
 
         let mut game = Game {
             day: 0,
+            rollback_day: 0,
             nutrients: 20,
+            rollback_nutrients: 20,
             number_of_trees: 1,
             cells
         };
@@ -588,6 +695,8 @@ mod tests {
         }
 
         assert_eq!(player.sun, 1);
+        assert_eq!(player.number_of_trees_0, 0);
+        assert_eq!(player.number_of_trees_1, 1);
     }
 
     #[test]
@@ -600,9 +709,12 @@ mod tests {
                 x: 0,
                 y: 0,
                 richness: 3,
+                rollback_richness: 3,
                 tree: None,
+                rollback_tree: None,
                 neighbours: [None, None, None, None, None, None],
-                shadow_size: 0
+                shadow_size: 0,
+                rollback_shadow_size: 0
             });
         }
 
@@ -635,17 +747,26 @@ mod tests {
         let mut player = Player {
             id: 0,
             sun: 0,
+            rollback_sun: 0,
             score: 0,
+            rollback_score: 0,
             waiting: 0,
+            rollback_waiting: 0,
             number_of_trees_0: 0,
+            rollback_number_of_trees_0: 0,
             number_of_trees_1: 0,
+            rollback_number_of_trees_1: 0,
             number_of_trees_2: 0,
-            number_of_trees_3: 0
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 0,
+            rollback_number_of_trees_3: 0,
         };
 
         let game = Game {
             day: 0,
+            rollback_day: 0,
             nutrients: 20,
+            rollback_nutrients: 20,
             number_of_trees: 6,
             cells
         };
@@ -664,9 +785,12 @@ mod tests {
                 x: 0,
                 y: 0,
                 richness: 3,
+                rollback_richness: 3,
                 tree: None,
+                rollback_tree: None,
                 neighbours: [None, None, None, None, None, None],
-                shadow_size: 0
+                shadow_size: 0,
+                rollback_shadow_size: 0
             });
         }
 
@@ -679,17 +803,26 @@ mod tests {
         let mut player = Player {
             id: 0,
             sun: 4,
+            rollback_sun: 0,
             score: 0,
+            rollback_score: 0,
             waiting: 0,
+            rollback_waiting: 0,
             number_of_trees_0: 0,
+            rollback_number_of_trees_0: 0,
             number_of_trees_1: 0,
+            rollback_number_of_trees_1: 0,
             number_of_trees_2: 0,
-            number_of_trees_3: 1
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 1,
+            rollback_number_of_trees_3: 1,
         };
 
         let mut game = Game {
             day: 0,
+            rollback_day: 0,
             nutrients: 20,
+            rollback_nutrients: 20,
             number_of_trees: 1,
             cells
         };
@@ -727,17 +860,26 @@ mod tests {
         let mut player = Player {
             id: 0,
             sun: 1,
+            rollback_sun: 0,
             score: 0,
+            rollback_score: 0,
             waiting: 0,
+            rollback_waiting: 0,
             number_of_trees_0: 1,
+            rollback_number_of_trees_0: 1,
             number_of_trees_1: 0,
+            rollback_number_of_trees_1: 0,
             number_of_trees_2: 0,
-            number_of_trees_3: 1
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 1,
+            rollback_number_of_trees_3: 1,
         };
 
         let mut game = Game {
             day: 0,
+            rollback_day: 0,
             nutrients: 20,
+            rollback_nutrients: 20,
             number_of_trees: 2,
             cells
         };
@@ -758,5 +900,219 @@ mod tests {
                 assert_eq!(t.is_dormant, 1);
             }
         };
+    }
+
+    #[test]
+    fn test_player_rollback() {
+        let mut cells: Vec<Cell> = Vec::new();
+
+        for i in 0..37 {
+            cells.push(Cell {
+                index: i,
+                x: 0,
+                y: 0,
+                richness: 3,
+                rollback_richness: 3,
+                tree: None,
+                rollback_tree: None,
+                neighbours: [None, None, None, None, None, None],
+                shadow_size: 0,
+                rollback_shadow_size: 0
+            });
+        }
+
+        cells[0].tree = Some(Tree{
+            size: 3,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        let mut player = Player {
+            id: 0,
+            sun: 4,
+            rollback_sun: 4,
+            score: 0,
+            rollback_score: 0,
+            waiting: 0,
+            rollback_waiting: 0,
+            number_of_trees_0: 0,
+            rollback_number_of_trees_0: 0,
+            number_of_trees_1: 0,
+            rollback_number_of_trees_1: 0,
+            number_of_trees_2: 0,
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 1,
+            rollback_number_of_trees_3: 1,
+        };
+
+        let mut game = Game {
+            day: 0,
+            rollback_day: 0,
+            nutrients: 20,
+            rollback_nutrients: 20,
+            number_of_trees: 1,
+            cells
+        };
+
+        player.complete(0, &mut game);
+        assert_eq!(player.sun, 0);
+        assert_eq!(player.score, 24);
+        assert_eq!(player.number_of_trees_3, 0);
+        assert_eq!(game.nutrients, 19);
+        assert_eq!(game.cells[0].tree.is_none(), true);
+
+        player.rollback();
+        assert_eq!(player.sun, 4);
+        assert_eq!(player.score, 0);
+        assert_eq!(player.number_of_trees_3, 1);
+    }
+
+    #[test]
+    fn test_cell_rollback() {
+        let mut cells: Vec<Cell> = Vec::new();
+        cells.push(Cell::new(0, 0, 0));
+        cells.push(Cell::new(1, 3, 0));
+
+        cells[0].tree = Some(Tree{
+            size: 3,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        cells[0].rollback_tree = Some(Tree{
+            size: 3,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        cells[1].richness = 1;
+        cells[1].rollback_richness = 1;
+
+        let mut player = Player {
+            id: 0,
+            sun: 1,
+            rollback_sun: 0,
+            score: 0,
+            rollback_score: 0,
+            waiting: 0,
+            rollback_waiting: 0,
+            number_of_trees_0: 1,
+            rollback_number_of_trees_0: 1,
+            number_of_trees_1: 0,
+            rollback_number_of_trees_1: 0,
+            number_of_trees_2: 0,
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 1,
+            rollback_number_of_trees_3: 1,
+        };
+
+        let mut game = Game {
+            day: 0,
+            rollback_day: 0,
+            nutrients: 20,
+            rollback_nutrients: 20,
+            number_of_trees: 2,
+            cells
+        };
+
+        player.seed(0, 1, &mut game);
+        assert_eq!(player.sun, 0);
+        assert_eq!(player.number_of_trees_0, 2);
+        
+        match &game.cells[0].tree {
+            None => panic!(""),
+            Some(t) => assert_eq!(t.is_dormant, 1)
+        };
+
+        match &game.cells[1].tree {
+            None => panic!(""),
+            Some(t) => {
+                assert_eq!(t.size, 0);
+                assert_eq!(t.is_dormant, 1);
+            }
+        };
+
+        game.cells[0].rollback();
+        game.cells[1].rollback();
+
+        match &game.cells[0].tree {
+            None => panic!(""),
+            Some(t) => assert_eq!(t.is_dormant, 0)
+        };
+
+        assert_eq!(game.cells[1].tree.is_none(), true);
+    }
+
+    #[test]
+    fn test_game_rollback() {
+        let mut cells: Vec<Cell> = Vec::new();
+
+        for i in 0..37 {
+            cells.push(Cell {
+                index: i,
+                x: 0,
+                y: 0,
+                richness: 3,
+                rollback_richness: 3,
+                tree: None,
+                rollback_tree: None,
+                neighbours: [None, None, None, None, None, None],
+                shadow_size: 0,
+                rollback_shadow_size: 0
+            });
+        }
+
+        cells[0].tree = Some(Tree{
+            size: 3,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        cells[0].rollback_tree = Some(Tree{
+            size: 3,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        let mut player = Player {
+            id: 0,
+            sun: 4,
+            rollback_sun: 4,
+            score: 0,
+            rollback_score: 0,
+            waiting: 0,
+            rollback_waiting: 0,
+            number_of_trees_0: 0,
+            rollback_number_of_trees_0: 0,
+            number_of_trees_1: 0,
+            rollback_number_of_trees_1: 0,
+            number_of_trees_2: 0,
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 1,
+            rollback_number_of_trees_3: 1,
+        };
+
+        let mut game = Game {
+            day: 0,
+            rollback_day: 0,
+            nutrients: 20,
+            rollback_nutrients: 20,
+            number_of_trees: 1,
+            cells
+        };
+
+        player.complete(0, &mut game);
+        assert_eq!(game.cells[0].tree.is_none(), true);
+        game.rollback();
+
+        match &game.cells[0].tree {
+            None => panic!(""),
+            Some(t) => {
+                assert_eq!(t.size, 3);
+                assert_eq!(t.is_mine, 1);
+                assert_eq!(t.is_dormant, 0);
+            }
+        };
+
     }
 }
