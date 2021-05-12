@@ -1,6 +1,12 @@
 use std::io;
 use rand::Rng;
 use std::cmp;
+use std::time::{Duration, Instant};
+
+const POPULATION_SIZE: usize = 100;
+const ACTIONS_COUNT: usize = 3;
+const MAX_DEPTH: usize = 25;
+const ACTION_TYPES: [&str;3] = ["GROW", "SEED", "COMPLETE"];
 
 macro_rules! parse_input {
     ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap())
@@ -57,8 +63,16 @@ struct Tree {
 }
 
 #[derive(Debug)]
+struct Action {
+    name: String,
+    index1: i32,
+    index2: i32
+}
+
+#[derive(Debug)]
 struct Individual {
     player_id: i32,
+    actions: [Vec<Action>;MAX_DEPTH],
     fitness: f64
 }
 
@@ -83,12 +97,12 @@ impl Player {
     }
 
     // Compléter le cycle de vie d'un arbre coûte 4 points de soleil.
-    fn complete(&mut self, index: usize, game: &mut Game) {
+    fn complete(&mut self, index: usize, game: &mut Game) -> Result<usize, usize> {
         match &game.cells[index].tree {
-            None => (),
+            None => Err(1),
             Some(t) => {
                 match t.is_mine {
-                    0 => (),
+                    0 => return Err(1),
                     1 => {
                         match t.size {
                             3 => {
@@ -105,9 +119,12 @@ impl Player {
                         
                                     game.nutrients -= 1;
                                     game.cells[index].tree = None;
+                                    return Ok(0)
                                 }
+
+                                return Err(1)
                             },
-                            0 | 1 | 2 => (),
+                            0 | 1 | 2 => return Err(1),
                             _ => panic!("")
                         }
                     },
@@ -117,13 +134,13 @@ impl Player {
         }
     }
 
-    fn grow(&mut self, index: usize, game: &mut Game) {
+    fn grow(&mut self, index: usize, game: &mut Game) -> Result<usize, usize> {
         match &mut game.cells[index].tree {
             Some(t) => {
                 match t.is_mine {
                     1 => {
                         if t.size == 3 || t.is_dormant == 1 {
-                            return;
+                            return Err(1)
                         }
 
                         let cost = match t.size {
@@ -142,49 +159,54 @@ impl Player {
                                 1 => {
                                     self.number_of_trees_0 -= 1;
                                     self.number_of_trees_1 += 1;
+                                    return Ok(0)
                                 },
                                 2 => {
                                     self.number_of_trees_1 -= 1;
                                     self.number_of_trees_2 += 1;
+                                    return Ok(0)
                                 },
                                 3 => {
                                     self.number_of_trees_2 -= 1;
                                     self.number_of_trees_3 += 1;
+                                    return Ok(0)
                                 },
                                 _ => panic!("")
                             }
                         }
+
+                        return Err(1)
                     },
-                    0 => (),
+                    0 => return Err(1),
                     _ => panic!("")
                 }
             },
-            None => ()
+            None => return Err(1)
         }
     }
 
-    fn seed(&mut self, index1: usize, index2: usize, game: &mut Game) {
+    fn seed(&mut self, index1: usize, index2: usize, game: &mut Game) -> Result<usize, usize> {
         match &game.cells[index1].tree {
-            None => (),
+            None => Err(1),
             Some(t) => {
                 match t.is_mine {
-                    0 => (),
+                    0 => return Err(1),
                     1 => {
                         match t.is_dormant {
-                            1 => (),
+                            1 => return Err(1),
                             0 => {
                                 match &game.cells[index2].richness {
-                                    0 => (),
+                                    0 => return Err(1),
                                     1 | 2 | 3 => {
                                         match &game.cells[index2].tree {
-                                            Some(_t) => (),
+                                            Some(_t) => return Err(1),
                                             None => {
                                                 if self.sun < self.number_of_trees_0 {
-                                                    return;
+                                                    return Err(1);
                                                 }
 
                                                 if &game.cells[index1].distance(&game.cells[index2]) > &t.size {
-                                                    return;
+                                                    return Err(1);
                                                 }
 
                                                 self.sun -= self.number_of_trees_0;
@@ -206,6 +228,7 @@ impl Player {
                                                     is_dormant: 1
                                                 });
                                                 
+                                                return Ok(0)
                                             }
                                         }
                                     },
@@ -324,7 +347,113 @@ impl Game {
 }
 
 impl Individual {
+    fn randomize(&mut self, game: &Game) {
+        let mut rng = rand::thread_rng();
+
+        for i in 0..MAX_DEPTH {
+            let action_counts = rng.gen_range(1..ACTIONS_COUNT);
+
+            for _i in 0..action_counts {
+                let name = ACTION_TYPES[rng.gen_range(0..3)];
+                let mut index1 = 0;
+                let mut index2 = 0;
+                let mut indexes: Vec<i32> = Vec::new();
+
+                match name {
+                    "GROW" => {
+                        for c in &game.cells {
+                            match &c.tree {
+                                Some(t) => {
+                                    if t.is_mine == 1 {
+                                        indexes.push(c.index);
+                                    }
+                                },
+                                None => ()
+                            }
+                        }
+
+                        index1 = indexes[rng.gen_range(0..indexes.len())];
+                    },
+                    "SEED" => {
+                        for c in &game.cells {
+                            match &c.tree {
+                                Some(t) => {
+                                    if t.is_mine == 1 {
+                                        indexes.push(c.index);
+                                    }
+                                },
+                                None => ()
+                            }
+                        }
+
+                        index1 = indexes[rng.gen_range(0..indexes.len())];
+                        index2 = rng.gen_range(0..37);
+                    },
+                    "COMPLETE" => {
+                        for c in &game.cells {
+                            match &c.tree {
+                                Some(t) => {
+                                    if t.is_mine == 1 {
+                                        indexes.push(c.index);
+                                    }
+                                },
+                                None => ()
+                            }
+                        }
+
+                        index1 = indexes[rng.gen_range(0..indexes.len())];
+                    },
+                    _ => panic!("")
+                };
+    
+                self.actions[i].push(Action {
+                    name: String::from(name),
+                    index1: index1,
+                    index2: index2
+                });
+            }
+        }
+    }
+
+    fn simulate(&mut self, game: &mut Game, player: &mut Player, opponent: &Player) {
+        for i in 0..MAX_DEPTH {
+            for n in 0..self.actions[i].iter().count() {
+                match self.actions[i][n].name.as_str() {
+                    "GROW" => {
+                        let res = player.grow(self.actions[i][n].index1 as usize, game);
+
+                        if res == Err(1) {
+                            break;
+                        }
+                    },
+                    "SEED" => {
+                        let res = player.seed(self.actions[i][n].index1 as usize, self.actions[i][n].index2 as usize, game);
+
+                        if res == Err(1) {
+                            break;
+                        }
+                    },
+                    "COMPLETE" => {
+                        let res = player.complete(self.actions[i][n].index1 as usize, game);
+
+                        if res == Err(1) {
+                            break;
+                        }
+                    },
+                    _ => panic!("")
+                }
+            }
+
+            game.day += 1;
+            player.gather_sun(game);
+            game.set_shadows();
+        }
+
+        self.fitness = self.fitness(player, opponent);
+    }
+
     fn fitness(&self, player: &Player, opponent: &Player) -> f64 {
+        // player.score.into()
         ((player.score + player.sun / 3) - (opponent.score + opponent.sun / 3)).into()
     }
 }
@@ -1113,6 +1242,285 @@ mod tests {
                 assert_eq!(t.is_dormant, 0);
             }
         };
+    }
 
+    #[test]
+    fn test_initialize_population() {
+        let mut cells: Vec<Cell> = Vec::new();
+
+        for i in 0..37 {
+            cells.push(Cell {
+                index: i,
+                x: 0,
+                y: 0,
+                richness: 3,
+                rollback_richness: 3,
+                tree: None,
+                rollback_tree: None,
+                neighbours: [None, None, None, None, None, None],
+                shadow_size: 0,
+                rollback_shadow_size: 0
+            });
+        }
+
+        let mut game = Game {
+            day: 0,
+            rollback_day: 0,
+            nutrients: 20,
+            rollback_nutrients: 20,
+            number_of_trees: 1,
+            cells
+        };
+
+        let mut population: Vec<Individual> = Vec::new();
+
+        for _i in 0..POPULATION_SIZE {
+            let mut individual = Individual {
+                player_id: 0,
+                actions: [vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!()],
+                fitness: 0.0
+            };
+
+            individual.randomize(&game);
+            population.push(individual);
+        }
+
+        eprintln!("{:?}", population);
+    }
+
+    #[test]
+    fn test_individual_simulate() {
+        let mut cells: Vec<Cell> = Vec::new();
+
+        cells.push(Cell::new(0, 0, 0));
+        cells.push(Cell::new(1, 1, 0));
+        cells.push(Cell::new(2, 0, 1));
+        cells.push(Cell::new(3, -1, 1));
+        cells.push(Cell::new(4, -1, 0));
+        cells.push(Cell::new(5, 0, -1));
+        cells.push(Cell::new(6, 1, -1));
+        cells.push(Cell::new(7, 2, 0));
+        cells.push(Cell::new(8, 1, 1));
+        cells.push(Cell::new(9, 0, 2));
+        cells.push(Cell::new(10, -1, 2));
+        cells.push(Cell::new(11, -2, 2));
+        cells.push(Cell::new(12, -2, 1));
+        cells.push(Cell::new(13, -2, 0));
+        cells.push(Cell::new(14, -1, -1));
+        cells.push(Cell::new(15, 0, -2));
+        cells.push(Cell::new(16, 1, -2));
+        cells.push(Cell::new(17, 2, -2));
+        cells.push(Cell::new(18, 2, -1));
+        cells.push(Cell::new(19, 3, 0));
+        cells.push(Cell::new(20, 2, 1));
+        cells.push(Cell::new(21, 1, 2));
+        cells.push(Cell::new(22, 0, 3));
+        cells.push(Cell::new(23, -1, 3));
+        cells.push(Cell::new(24, -2, 3));
+        cells.push(Cell::new(25, -3, 3));
+        cells.push(Cell::new(26, -3, 2));
+        cells.push(Cell::new(27, -3, 1));
+        cells.push(Cell::new(28, -3, 0));
+        cells.push(Cell::new(29, -2, -1));
+        cells.push(Cell::new(30, -1, -2));
+        cells.push(Cell::new(31, 0, -3));
+        cells.push(Cell::new(32, 1, -3));
+        cells.push(Cell::new(33, 2, -3));
+        cells.push(Cell::new(34, 3, -3));
+        cells.push(Cell::new(35, 3, -2));
+        cells.push(Cell::new(36, 3, -1));
+
+        cells[0].neighbours = [Some(1), Some(2), Some(3), Some(4), Some(5), Some(6)];
+        cells[1].neighbours = [Some(7), Some(8), Some(2), Some(0), Some(6), Some(18)];
+        cells[2].neighbours = [Some(8), Some(9), Some(10), Some(3), Some(0), Some(1)];
+        cells[3].neighbours = [Some(2), Some(10), Some(11), Some(12), Some(4), Some(0)];
+        cells[4].neighbours = [Some(0), Some(3), Some(12), Some(13), Some(14), Some(5)];
+        cells[5].neighbours = [Some(6), Some(0), Some(4), Some(14), Some(15), Some(16)];
+        cells[6].neighbours = [Some(18), Some(1), Some(0), Some(5), Some(16), Some(17)];
+        cells[7].neighbours = [Some(19), Some(20), Some(8), Some(1), Some(18), Some(36)];
+        cells[8].neighbours = [Some(20), Some(21), Some(9), Some(2), Some(1), Some(7)];
+        cells[9].neighbours = [Some(21), Some(22), Some(23), Some(10), Some(2), Some(8)];
+        cells[10].neighbours = [Some(9), Some(23), Some(24), Some(11), Some(3), Some(2)];
+        cells[11].neighbours = [Some(10), Some(24), Some(25), Some(26), Some(12), Some(3)];
+        cells[12].neighbours = [Some(3), Some(11), Some(26), Some(27), Some(13), Some(4)];
+        cells[13].neighbours = [Some(4), Some(12), Some(27), Some(28), Some(29), Some(14)];
+        cells[14].neighbours = [Some(5), Some(4), Some(13), Some(29), Some(30), Some(15)];
+        cells[15].neighbours = [Some(16), Some(5), Some(14), Some(30), Some(31), Some(32)];
+        cells[16].neighbours = [Some(17), Some(6), Some(5), Some(15), Some(32), Some(33)];
+        cells[17].neighbours = [Some(35), Some(18), Some(6), Some(16), Some(33), Some(34)];
+        cells[18].neighbours = [Some(36), Some(7), Some(1), Some(6), Some(17), Some(35)];
+        cells[19].neighbours = [None, None, Some(20), Some(7), Some(36), None];
+        cells[20].neighbours = [None, None, Some(21), Some(8), Some(7), Some(19)];
+        cells[21].neighbours = [None, None, Some(22), Some(9), Some(8), Some(20)];
+        cells[22].neighbours = [None, None, None, Some(23), Some(9), Some(21)];
+        cells[23].neighbours = [Some(22), None, None, Some(24), Some(10), Some(9)];
+        cells[24].neighbours = [Some(23), None, None, Some(25), Some(11), Some(10)];
+        cells[25].neighbours = [Some(24), None, None, None, Some(26), Some(11)];
+        cells[26].neighbours = [Some(11), Some(25), None, None, Some(27), Some(12)];
+        cells[27].neighbours = [Some(12), Some(26), None, None, Some(28), Some(13)];
+        cells[28].neighbours = [Some(13), Some(27), None, None, None, Some(29)];
+        cells[29].neighbours = [Some(14), Some(13), Some(28), None, None, Some(30)];
+        cells[30].neighbours = [Some(15), Some(14), Some(29), None, None, Some(31)];
+        cells[31].neighbours = [Some(32), Some(15), Some(30), None, None, None];
+        cells[32].neighbours = [Some(33), Some(16), Some(15), Some(31), None, None];
+        cells[33].neighbours = [Some(34), Some(17), Some(16), Some(32), None, None];
+        cells[34].neighbours = [None, Some(35), Some(17), Some(33), None, None];
+        cells[35].neighbours = [None, Some(36), Some(18), Some(17), Some(34), None];
+        cells[36].neighbours = [None, Some(19), Some(7), Some(18), Some(35), None];
+
+        cells[32].tree = Some(Tree{
+            size: 1,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        cells[32].rollback_tree = Some(Tree{
+            size: 1,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        cells[35].tree = Some(Tree{
+            size: 1,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        cells[35].rollback_tree = Some(Tree{
+            size: 1,
+            is_mine: 1,
+            is_dormant: 0
+        });
+
+        cells[23].tree = Some(Tree{
+            size: 1,
+            is_mine: 0,
+            is_dormant: 0
+        });
+
+        cells[23].rollback_tree = Some(Tree{
+            size: 1,
+            is_mine: 0,
+            is_dormant: 0
+        });
+
+        cells[26].tree = Some(Tree{
+            size: 1,
+            is_mine: 0,
+            is_dormant: 0
+        });
+
+        cells[26].rollback_tree = Some(Tree{
+            size: 1,
+            is_mine: 0,
+            is_dormant: 0
+        });
+
+        let mut player = Player {
+            id: 0,
+            sun: 2,
+            rollback_sun: 2,
+            score: 0,
+            rollback_score: 0,
+            waiting: 0,
+            rollback_waiting: 0,
+            number_of_trees_0: 0,
+            rollback_number_of_trees_0: 0,
+            number_of_trees_1: 2,
+            rollback_number_of_trees_1: 2,
+            number_of_trees_2: 0,
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 0,
+            rollback_number_of_trees_3: 0,
+        };
+
+        let mut opponent = Player {
+            id: 1,
+            sun: 2,
+            rollback_sun: 2,
+            score: 0,
+            rollback_score: 0,
+            waiting: 0,
+            rollback_waiting: 0,
+            number_of_trees_0: 0,
+            rollback_number_of_trees_0: 0,
+            number_of_trees_1: 2,
+            rollback_number_of_trees_1: 2,
+            number_of_trees_2: 0,
+            rollback_number_of_trees_2: 0,
+            number_of_trees_3: 0,
+            rollback_number_of_trees_3: 0,
+        };
+
+        let mut game = Game {
+            day: 0,
+            rollback_day: 0,
+            nutrients: 20,
+            rollback_nutrients: 20,
+            number_of_trees: 4,
+            cells
+        };
+
+        player.gather_sun(&game);
+        game.set_shadows();
+
+        let mut best = Individual {
+            player_id: 0,
+            actions: [vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!()],
+            fitness: 0.0
+        };
+
+        let mut population: Vec<Individual> = Vec::new();
+
+        for _i in 0..POPULATION_SIZE {
+            let mut individual = Individual {
+                player_id: 0,
+                actions: [vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!(), vec!()],
+                fitness: 0.0
+            };
+
+            individual.randomize(&game);
+            population.push(individual);
+        }
+
+        // eprintln!("{:?}", population);
+
+        /********************************************* */
+        //                  TIME                    
+        /********************************************* */
+        let start = Instant::now();
+        let limit = Duration::from_millis(95);
+
+        while start.elapsed() < limit {
+            eprintln!("{:?}", start.elapsed());
+
+            for i in 0..POPULATION_SIZE {
+                population[i].simulate(&mut game, &mut player, &mut opponent);
+    
+                if population[i].fitness > best.fitness {
+                    best.player_id = population[i].player_id;
+    
+                    for j in 0..MAX_DEPTH {
+                        for n in 0..population[i].actions[j].iter().count() {
+                            best.actions[j].clear();
+    
+                            best.actions[j].push(Action {
+                                name: population[i].actions[j][n].name.clone(),
+                                index1: population[i].actions[j][n].index1,
+                                index2: population[i].actions[j][n].index2
+                            });
+                        }
+                    }
+    
+                    best.fitness = population[i].fitness;
+                }
+    
+                game.rollback();
+                player.rollback();
+                opponent.rollback();
+            }
+
+            eprintln!("{:?}", best);
+        }
     }
 }
